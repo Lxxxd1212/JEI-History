@@ -62,6 +62,8 @@ public class HistoryIngredientListGrid extends IngredientGrid {
     private boolean showHistory = false;
     private int historyMaxSize;
     private int historyHeight;
+    private int historyStartY;
+    private int historyEndY;
 
 
     public HistoryIngredientListGrid(IIngredientManager ingredientManager, IIngredientGridConfig gridConfig, IIngredientFilterConfig ingredientFilterConfig, IClientConfig clientConfig, IClientToggleState toggleState, IConnectionToServer serverConnection, IInternalKeyMappings keyBindings, IColorHelper colorHelper, boolean searchable) {
@@ -90,8 +92,15 @@ public class HistoryIngredientListGrid extends IngredientGrid {
         }
 
         historyHeight = showHistory ? JeiHistoryConfig.history_rows * INGREDIENT_HEIGHT : 0;
+        // Anchor history region to the bottom of the available area without moving the main grid
+        this.historyEndY = availableArea.getY() + availableArea.getHeight();
+        this.historyStartY = this.historyEndY - historyHeight;
 
-        for (int y = area.getY(); y < area.getY() + area.getHeight() - historyHeight; y += INGREDIENT_HEIGHT) {
+        int unclampedBottom = Math.min(area.getY() + area.getHeight(), this.historyStartY);
+        int visibleHeight = Math.max(0, unclampedBottom - area.getY());
+        int visibleRows = visibleHeight / INGREDIENT_HEIGHT; // align to full rows to avoid overlap
+        int mainGridBottomAligned = area.getY() + (visibleRows * INGREDIENT_HEIGHT);
+        for (int y = area.getY(); y < mainGridBottomAligned; y += INGREDIENT_HEIGHT) {
             for (int x = area.getX(); x < area.getX() + area.getWidth(); x += INGREDIENT_WIDTH) {
                 IngredientListSlot ingredientListSlot = new IngredientListSlot(x, y, INGREDIENT_WIDTH, INGREDIENT_HEIGHT, INGREDIENT_PADDING);
                 ImmutableRect2i stackArea = ingredientListSlot.getArea();
@@ -102,8 +111,7 @@ public class HistoryIngredientListGrid extends IngredientGrid {
         }
 
         if (showHistory) {
-            int startY = area.getY() + area.getHeight() - historyHeight;
-            for (int y = startY; y < area.getY() + area.getHeight(); y += INGREDIENT_HEIGHT) {
+            for (int y = this.historyStartY; y < this.historyEndY; y += INGREDIENT_HEIGHT) {
                 for (int x = area.getX(); x < area.getX() + area.getWidth(); x += INGREDIENT_WIDTH) {
                     IngredientListSlot ingredientListSlot = new IngredientListSlot(x, y, INGREDIENT_WIDTH, INGREDIENT_HEIGHT, INGREDIENT_PADDING);
                     ImmutableRect2i stackArea = ingredientListSlot.getArea();
@@ -157,13 +165,15 @@ public class HistoryIngredientListGrid extends IngredientGrid {
 
         if (++timer > 60) {
             timer = 0;
-           // 331 28 421 208
+            // 331 28 421 208
             // 259 28 421 208
         }
 
         if (showHistory) {
             this.historyIngredientSlotRenderer.render(guiGraphics);
-            if (isMouseOver(mouseX, mouseY)) {
+            ImmutableRect2i area = this.getArea();
+            boolean mouseInHistory = mouseX >= area.getX() && mouseX < area.getX() + area.getWidth() && mouseY >= this.historyStartY && mouseY < this.historyEndY;
+            if (isMouseOver(mouseX, mouseY) || mouseInHistory) {
                 DeleteItemInputHandler deleteItemInputHandler = (DeleteItemInputHandler) this.getInputHandler();
                 if (!deleteItemInputHandler.shouldDeleteItemOnClick(minecraft, mouseX, mouseY)) {
                     this.historyIngredientSlotRenderer.getSlots()
@@ -172,10 +182,9 @@ public class HistoryIngredientListGrid extends IngredientGrid {
                             .findFirst()
                             .ifPresent((s) -> drawHighlight(guiGraphics, s.getArea()));
                 }
-                ImmutableRect2i area = this.getArea();
                 int endX = area.getX() + area.getWidth();
-                int startY = area.getY() + area.getHeight() - historyHeight;
-                int endY = area.getY() + area.getHeight();
+                int startY = this.historyStartY;
+                int endY = this.historyEndY;
                 int colour = 0xee555555;
 
                 drawHorizontalDashedLine(guiGraphics.pose(), area.getX(), endX, startY, colour, false);
@@ -195,7 +204,9 @@ public class HistoryIngredientListGrid extends IngredientGrid {
         }
 
         if (showHistory) {
-            if (isMouseOver(mouseX, mouseY)) {
+            ImmutableRect2i area = this.getArea();
+            boolean mouseInHistory = mouseX >= area.getX() && mouseX < area.getX() + area.getWidth() && mouseY >= this.historyStartY && mouseY < this.historyEndY;
+            if (isMouseOver(mouseX, mouseY) || mouseInHistory) {
                 DeleteItemInputHandler deleteItemInputHandler = (DeleteItemInputHandler) this.getInputHandler();
                 if (deleteItemInputHandler.shouldDeleteItemOnClick(minecraft, mouseX, mouseY)) {
                     deleteItemInputHandler.drawTooltips(guiGraphics, mouseX, mouseY);
